@@ -46,7 +46,7 @@ TicTacToe-RL/
 
 ```bash
 git clone <YOUR_GITHUB_REPOSITORY_URL>
-cd TicTacToe-RL
+cd TIC-TAC-TOE
 ```
 
 Alternatively, open your existing project folder in VS Code.
