@@ -28,7 +28,6 @@ desktop.ini
 .env.*
 
 # Generated model and training files
-q_table.pkl
 *.joblib
 *.model
 

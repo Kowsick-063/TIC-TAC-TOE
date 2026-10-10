@@ -1,7 +1,9 @@
 
+import os
 import random
 import pygame
 from game import TicTacToe, X, O
+from agent import QLearningAgent
 
 pygame.init()
 
@@ -35,6 +37,18 @@ heading = font(18, True)
 body = font(15)
 small = font(13)
 symbol_font = font(76, True)
+
+# -------------------- TRAINED AI --------------------
+
+MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "q_table.pkl")
+
+if os.path.exists(MODEL_PATH):
+    agent = QLearningAgent.load(MODEL_PATH)
+    print(f"Loaded trained Q-Learning agent ({len(agent)} states).")
+else:
+    agent = None
+    print("q_table.pkl not found - run 'python train.py' first. "
+          "Falling back to a random opponent.")
 
 # -------------------- GAME STATE --------------------
 
@@ -107,12 +121,21 @@ def new_game():
 
 
 def ai_move():
-    """Temporary random opponent until Q-Learning is integrated."""
+    """The trained Q-Learning agent plays O (greedy, no learning)."""
     if mode == "ai" and not game.done and game.current_player == O:
         actions = game.get_legal_actions()
 
-        if actions:
-            game.make_move(random.choice(actions))
+        if not actions:
+            return
+
+        if agent is not None:
+            action = agent.choose_action(
+                game.get_state(), actions, O, training=False
+            )
+        else:
+            action = random.choice(actions)
+
+        game.make_move(action)
 
 
 def record_result():
@@ -146,7 +169,7 @@ def draw():
     # Header
     text("Tic-Tac-Toe", 35, 25, TEXT, title_font)
     text(
-        "A simple game with reinforcement learning",
+        "Human vs a Q-Learning agent" if agent else "A simple game with reinforcement learning",
         37, 62, MUTED, small
     )
 
