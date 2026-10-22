@@ -162,7 +162,7 @@ Developed as a student mini-project on Reinforcement Learning.
 
 This project is intended for educational purposes.
 
-## Q-Learning Agent (Member 2) - `agent.py`
+## Q-Learning Design
 
 | Item | Design |
 |---|---|
@@ -173,7 +173,7 @@ This project is intended for educational purposes.
 | Update | `Q(s,a) <- Q(s,a) + alpha [ r + gamma max Q(s',a') - Q(s,a) ]`, future term = 0 on terminal states |
 | Defaults | alpha 0.5, gamma 0.9, epsilon 1.0 -> 0.05, decay 0.9995 |
 
-### Interface (for Member 3's `train.py` and `main.py`)
+### Interface
 
 ```python
 from agent import QLearningAgent
@@ -193,43 +193,7 @@ agent.decay_epsilon()                                  # once per episode
 agent.save("q_table.pkl");  agent = QLearningAgent.load("q_table.pkl")
 ```
 
-**Important for the training loop:** after the agent moves, wait for the
-opponent's reply, then call `update` with the board where the agent moves
-*next* (the opponent is part of the environment). If the game ends on either
-side's move, call `update` with `done=True` and the final reward. See
-`play_episode()` in `test_agent.py` for a complete working example.
-
-### Plugging the trained AI into `main.py`
-
-Replace the body of `ai_move()` with:
-
-```python
-agent = QLearningAgent.load("q_table.pkl")   # once, at start-up
-
-def ai_move():
-    if mode == "ai" and not game.done and game.current_player == O:
-        action = agent.choose_action(game.get_state(),
-                                     game.get_legal_actions(), O,
-                                     training=False)
-        game.make_move(action)
-```
-
-## Training and Evaluation (Member 3) - `train.py`
-
-**Training:** 60,000 episodes of a mixed schedule - 30% self-play (one shared Q-table
-plays both X and O), 20% vs a random player, 20% vs a perfect minimax player,
-30% vs a "noisy" perfect player (25% random moves). Epsilon decays from 1.0 to 0.05.
-
-**Evaluation:** greedy play (no learning), 1,000 games per opponent, agent alternating X and O.
-
-| Opponent | Stage | Wins | Losses | Draws | Win % | Loss % | Avg reward |
-|---|---|---|---|---|---|---|---|
-| Random | Before | 432 | 436 | 132 | 43.2 | 43.6 | 0.022 |
-| Random | After | 920 | 0 | 80 | 92.0 | 0.0 | 0.936 |
-| Optimal (minimax) | Before | 0 | 877 | 123 | 0.0 | 87.7 | -0.852 |
-| Optimal (minimax) | After | 0 | 0 | 1000 | 0.0 | 0.0 | 0.200 |
-
-Against a perfect player the best possible result is a draw; the trained agent reaches it
-in every game. An exhaustive check of every possible human move sequence also found no
-line in which the agent loses (579 game lines as O, 108 as X). Exact numbers vary slightly
-with the random seed.
+The training script supports random-opponent training (the default), minimax
+opponent training, and shared-table self-play. Evaluation is greedy and does
+not update the Q-table. Always report metrics from a separately invoked
+`evaluate.py` run; results vary with the seed and training configuration.

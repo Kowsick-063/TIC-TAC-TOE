@@ -67,12 +67,12 @@ def evaluate(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", type=Path, default=Path("q_table.json"))
+    parser.add_argument("--model", type=Path, default=Path("q_table.pkl"))
     parser.add_argument("--games", type=int, default=1_000)
     parser.add_argument("--seed", type=int, default=11)
     args = parser.parse_args()
 
-    agent = QLearningAgent.load(args.model, seed=args.seed)
+    agent = QLearningAgent.load(args.model)
     result = evaluate(agent, args.games, args.seed)
     print(
         f"{result.games} games: {result.wins} wins ({result.win_rate:.1%}), "

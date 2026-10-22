@@ -118,19 +118,24 @@ def evaluate(agent, opponent_policy=random_policy, games=1000):
 
 def train(agent, episodes=50000, opponent="random", checkpoint_every=1000,
           eval_games=200):
-    """Train against random, minimax, or self-play and return checkpoints."""
+    """Train against random, minimax, self-play, or a mixed schedule."""
     if episodes < 1:
         raise ValueError("episodes must be positive.")
     policies = {"random": random_policy, "optimal": optimal_policy}
     log = []
     for episode in range(1, episodes + 1):
-        if opponent == "self":
+        selected_opponent = opponent
+        if opponent == "mixed":
+            selected_opponent = random.choices(
+                ("random", "optimal", "self"), weights=(5, 2, 3), k=1
+            )[0]
+        if selected_opponent == "self":
             learners, policy = [X, O], random_policy
-        elif opponent in policies:
+        elif selected_opponent in policies:
             player = X if episode % 2 else O
-            learners, policy = [player], policies[opponent]
+            learners, policy = [player], policies[selected_opponent]
         else:
-            raise ValueError("opponent must be random, optimal, or self.")
+            raise ValueError("opponent must be random, optimal, self, or mixed.")
         play_episode(agent, learners, policy, training=True)
         agent.decay_epsilon()
         if episode % checkpoint_every == 0:
@@ -143,7 +148,7 @@ def train(agent, episodes=50000, opponent="random", checkpoint_every=1000,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episodes", type=int, default=50000)
-    parser.add_argument("--opponent", choices=("random", "optimal", "self"),
+    parser.add_argument("--opponent", choices=("random", "optimal", "self", "mixed"),
                         default="random")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--out", default="q_table.pkl")
