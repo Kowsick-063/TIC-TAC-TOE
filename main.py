@@ -1,6 +1,9 @@
 
 import random
+from pathlib import Path
+
 import pygame
+from agent import QLearningAgent
 from game import TicTacToe, X, O
 
 pygame.init()
@@ -40,6 +43,16 @@ symbol_font = font(76, True)
 
 game = TicTacToe()
 mode = "ai"
+MODEL_PATH = Path(__file__).with_name("q_table.json")
+
+try:
+    trained_agent = QLearningAgent.load(MODEL_PATH)
+    ai_label = "Trained AI"
+except FileNotFoundError:
+    trained_agent = None
+    ai_label = "Random AI (train first)"
+except ValueError as exc:
+    raise RuntimeError(f"Unable to load {MODEL_PATH}: {exc}") from exc
 
 stats = {
     "you": 0,
@@ -107,12 +120,21 @@ def new_game():
 
 
 def ai_move():
-    """Temporary random opponent until Q-Learning is integrated."""
+    """Play one trained-agent move, with a clear random fallback."""
     if mode == "ai" and not game.done and game.current_player == O:
         actions = game.get_legal_actions()
 
         if actions:
-            game.make_move(random.choice(actions))
+            if trained_agent is None:
+                action = random.choice(actions)
+            else:
+                state = trained_agent.encode_state(
+                    game.get_state(), game.current_player
+                )
+                action = trained_agent.select_action(
+                    state, actions, training=False
+                )
+            game.make_move(action)
 
 
 def record_result():
@@ -168,14 +190,14 @@ def draw():
             status = "You won!"
             status_color = GREEN
         elif result == O:
-            status = "Player  won!" if mode == "human" else "AI won!"
+            status = "Player  won!" if mode == "human" else f"{ai_label} won!"
             status_color = PINK
         else:
             status = "It's a draw!"
             status_color = BLUE
 
     elif mode == "ai" and game.current_player == O:
-        status = "AI's turn"
+        status = f"{ai_label}'s turn"
         status_color = PINK
 
     else:
@@ -287,7 +309,7 @@ def draw():
     players = [
         ("You", stats["you"], BLUE),
         (
-            "AI" if mode == "ai" else "Player",
+            ai_label if mode == "ai" else "Player",
             stats["ai"] if mode == "ai" else stats["p2"],
             PINK,
         ),
@@ -327,42 +349,47 @@ def draw():
 
 # -------------------- MAIN LOOP --------------------
 
-running = True
+def main():
+    running = True
 
-while running:
-    draw()
+    while running:
+        draw()
 
-    for event in pygame.event.get():
+        for event in pygame.event.get():
 
-        if event.type == pygame.QUIT:
-            running = False
+            if event.type == pygame.QUIT:
+                running = False
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            pos = event.pos
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                pos = event.pos
 
-            if new_btn.collidepoint(pos):
-                new_game()
+                if new_btn.collidepoint(pos):
+                    new_game()
 
-            elif mode_btn.collidepoint(pos):
-                mode = "human" if mode == "ai" else "ai"
-                new_game()
+                elif mode_btn.collidepoint(pos):
+                    mode = "human" if mode == "ai" else "ai"
+                    new_game()
 
-            elif board_rect.collidepoint(pos) and not game.done:
+                elif board_rect.collidepoint(pos) and not game.done:
 
-                # AI plays O; the human controls X.
-                if mode == "ai" and game.current_player == O:
-                    continue
+                    # AI plays O; the human controls X.
+                    if mode == "ai" and game.current_player == O:
+                        continue
 
-                col = (pos[0] - board_rect.x) // cell
-                row = (pos[1] - board_rect.y) // cell
-                position = row * 3 + col
+                    col = (pos[0] - board_rect.x) // cell
+                    row = (pos[1] - board_rect.y) // cell
+                    position = row * 3 + col
 
-                if game.make_move(position):
-                    if not game.done:
-                        ai_move()
+                    if game.make_move(position):
+                        if not game.done:
+                            ai_move()
 
-                    record_result()
+                        record_result()
 
-    clock.tick(60)
+        clock.tick(60)
 
-pygame.quit()
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
