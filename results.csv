@@ -1,0 +1,5 @@
+opponent,stage,games,wins,losses,draws,win_rate,loss_rate,draw_rate,avg_reward
+random,before,1000,432,436,132,43.2,43.6,13.2,0.022
+optimal,before,1000,0,877,123,0.0,87.7,12.3,-0.852
+random,after,1000,920,0,80,92.0,0.0,8.0,0.936
+optimal,after,1000,0,0,1000,0.0,0.0,100.0,0.2

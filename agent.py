@@ -1,148 +1,147 @@
-"""Tabular Q-Learning agent for Tic-Tac-Toe.
+"""Perspective-consistent tabular Q-Learning for Tic-Tac-Toe.
 
-States passed to this class are always from the learning player's
-perspective: the learning player's marks are ``1``, the opponent's marks
-are ``-1``, and empty cells are ``0``. Actions are board positions 0-8.
+The Q-table maps a board state, represented from the learning player's
+perspective, to nine action values. Own marks are ``1``, opponent marks are
+``-1``, and empty cells are ``0``. Actions are board positions 0 through 8.
+Models are stored as JSON, even when a legacy ``.pkl`` filename is supplied;
+JSON avoids unsafe deserialization.
 """
 
 import json
 import math
 import random
 from pathlib import Path
-from typing import Iterable
 
-
-State = tuple[int, ...]
-QTable = dict[tuple[State, int], float]
+REWARD_WIN = 1.0
+REWARD_DRAW = 0.2
+REWARD_LOSS = -1.0
+REWARD_STEP = 0.0
+DRAW = "draw"
 
 
 class QLearningAgent:
-    """A legal-action epsilon-greedy tabular Q-Learning agent."""
-
     MODEL_VERSION = 1
 
     def __init__(
         self,
-        alpha: float = 0.2,
-        gamma: float = 0.95,
-        epsilon: float = 1.0,
-        epsilon_min: float = 0.05,
-        epsilon_decay: float = 0.9995,
-        seed: int | None = None,
+        alpha=0.5,
+        gamma=0.9,
+        epsilon=1.0,
+        epsilon_min=0.05,
+        epsilon_decay=0.9995,
+        seed=None,
     ):
         if not 0 < alpha <= 1:
-            raise ValueError("alpha must be in the interval (0, 1].")
+            raise ValueError("alpha must be in (0, 1].")
         if not 0 <= gamma <= 1:
-            raise ValueError("gamma must be in the interval [0, 1].")
-        if not 0 <= epsilon <= 1:
-            raise ValueError("epsilon must be in the interval [0, 1].")
-        if not 0 <= epsilon_min <= 1:
-            raise ValueError("epsilon_min must be in the interval [0, 1].")
+            raise ValueError("gamma must be in [0, 1].")
+        if not 0 <= epsilon <= 1 or not 0 <= epsilon_min <= 1:
+            raise ValueError("epsilon and epsilon_min must be in [0, 1].")
         if not 0 < epsilon_decay <= 1:
-            raise ValueError("epsilon_decay must be in the interval (0, 1].")
-
+            raise ValueError("epsilon_decay must be in (0, 1].")
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
+        self.q_table = {}
         self._random = random.Random(seed)
-        self.q_table: QTable = {}
 
     @staticmethod
-    def encode_state(board: Iterable[int], player: int) -> State:
-        """Encode an absolute board from ``player``'s point of view."""
+    def encode_state(board, player):
+        """Return ``board`` from ``player``'s perspective."""
         if player not in (-1, 1):
-            raise ValueError("player must be 1 (X) or -1 (O).")
-        state = tuple(int(cell) * player for cell in board)
-        if len(state) != 9 or any(cell not in (-1, 0, 1) for cell in state):
-            raise ValueError("board must contain exactly nine values in {-1, 0, 1}.")
-        return state
+            raise ValueError("player must be X (1) or O (-1).")
+        board = tuple(board)
+        if len(board) != 9 or any(cell not in (-1, 0, 1) for cell in board):
+            raise ValueError("board must contain nine values in {-1, 0, 1}.")
+        return tuple(cell * player for cell in board)
 
     @staticmethod
-    def _validate_state(state: Iterable[int]) -> State:
+    def _validate_state(state):
         state = tuple(state)
         if len(state) != 9 or any(cell not in (-1, 0, 1) for cell in state):
-            raise ValueError("state must contain exactly nine values in {-1, 0, 1}.")
+            raise ValueError("state must contain nine values in {-1, 0, 1}.")
         return state
 
     @staticmethod
-    def _validate_actions(legal_actions: Iterable[int]) -> list[int]:
-        actions = list(legal_actions)
-        if not actions or any(action not in range(9) for action in actions):
-            raise ValueError("legal_actions must contain at least one board position from 0 to 8.")
-        if len(set(actions)) != len(actions):
-            raise ValueError("legal_actions must not contain duplicates.")
-        return actions
+    def get_legal_actions(board):
+        return [index for index, cell in enumerate(board) if cell == 0]
 
-    def _value(self, state: State, action: int) -> float:
-        return self.q_table.get((state, action), 0.0)
+    def _q_values(self, state):
+        if state not in self.q_table:
+            self.q_table[state] = [0.0] * 9
+        return self.q_table[state]
 
-    def select_action(
-        self,
-        state: Iterable[int],
-        legal_actions: Iterable[int],
-        training: bool = True,
-    ) -> int:
-        """Select a legal action with epsilon-greedy exploration."""
-        state = self._validate_state(state)
-        actions = self._validate_actions(legal_actions)
+    def get_q(self, board, action, player):
+        if action not in range(9):
+            raise ValueError("action must be between 0 and 8.")
+        return self._q_values(self.encode_state(board, player))[action]
 
+    def choose_action(self, board, legal_actions=None, player=1, training=True):
+        """Choose a legal action using epsilon-greedy selection."""
+        board = tuple(board)
+        legal_actions = (
+            self.get_legal_actions(board)
+            if legal_actions is None
+            else list(legal_actions)
+        )
+        if not legal_actions:
+            raise ValueError("No legal actions available.")
+        if any(action not in range(9) for action in legal_actions):
+            raise ValueError("legal_actions contains an invalid action.")
         if training and self._random.random() < self.epsilon:
-            return self._random.choice(actions)
+            return self._random.choice(legal_actions)
+        values = self._q_values(self.encode_state(board, player))
+        best_value = max(values[action] for action in legal_actions)
+        best = [action for action in legal_actions if values[action] == best_value]
+        return self._random.choice(best)
 
-        best_value = max(self._value(state, action) for action in actions)
-        best_actions = [
-            action for action in actions
-            if math.isclose(self._value(state, action), best_value)
-        ]
-        return self._random.choice(best_actions)
+    def select_action(self, state, legal_actions, training=True):
+        """Select an action when ``state`` is already perspective-encoded."""
+        state = self._validate_state(state)
+        return self.choose_action(state, legal_actions, 1, training)
+
+    def best_action(self, board, legal_actions, player):
+        return self.choose_action(board, legal_actions, player, False)
+
+    @staticmethod
+    def get_reward(result, player):
+        if result is None:
+            return REWARD_STEP
+        if result == DRAW:
+            return REWARD_DRAW
+        return REWARD_WIN if result == player else REWARD_LOSS
 
     def update(
-        self,
-        state: Iterable[int],
-        action: int,
-        reward: float,
-        next_state: Iterable[int] | None,
-        legal_next_actions: Iterable[int] | None,
-        done: bool,
-    ) -> float:
-        """Apply one Q-Learning update and return the new Q-value.
-
-        Terminal transitions never bootstrap. A non-terminal transition must
-        provide at least one legal next action so that the maximum is valid.
-        """
-        state = self._validate_state(state)
+        self, board, action, reward, next_board, next_legal_actions, done, player=1
+    ):
+        """Apply Q(s,a) <- Q(s,a) + alpha(target - Q(s,a))."""
+        state = self.encode_state(board, player)
+        values = self._q_values(state)
         if action not in range(9):
-            raise ValueError("action must be a board position from 0 to 8.")
+            raise ValueError("action must be between 0 and 8.")
         if done:
-            target = float(reward)
+            future = 0.0
         else:
-            if next_state is None or legal_next_actions is None:
-                raise ValueError("non-terminal updates require next state and legal actions.")
-            next_state = self._validate_state(next_state)
-            actions = self._validate_actions(legal_next_actions)
-            target = float(reward) + self.gamma * max(
-                self._value(next_state, next_action) for next_action in actions
-            )
+            if next_board is None or not next_legal_actions:
+                raise ValueError("Non-terminal updates need legal next actions.")
+            next_state = self.encode_state(next_board, player)
+            next_values = self._q_values(next_state)
+            future = max(next_values[a] for a in next_legal_actions)
+        target = reward + self.gamma * future
+        values[action] += self.alpha * (target - values[action])
+        return values[action]
 
-        old_value = self._value(state, action)
-        new_value = old_value + self.alpha * (target - old_value)
-        self.q_table[(state, action)] = new_value
-        return new_value
-
-    def decay_epsilon(self) -> float:
-        """Decay exploration after an episode and return the new epsilon."""
+    def decay_epsilon(self):
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
         return self.epsilon
 
-    def save(self, path: str | Path) -> None:
-        """Save a validated, portable JSON model."""
-        path = Path(path)
-        records = [
-            {"state": list(state), "action": action, "value": value}
-            for (state, action), value in self.q_table.items()
-        ]
+    def __len__(self):
+        return len(self.q_table)
+
+    def save(self, path="q_table.pkl"):
+        """Save model data as validated JSON rather than executable pickle data."""
         payload = {
             "version": self.MODEL_VERSION,
             "parameters": {
@@ -152,47 +151,42 @@ class QLearningAgent:
                 "epsilon_min": self.epsilon_min,
                 "epsilon_decay": self.epsilon_decay,
             },
-            "q_values": records,
+            "q_table": [
+                {"state": list(state), "values": values}
+                for state, values in self.q_table.items()
+            ],
         }
+        path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: str | Path, seed: int | None = None) -> "QLearningAgent":
-        """Load and validate a JSON model created by :meth:`save`."""
+    def load(cls, path="q_table.pkl"):
         path = Path(path)
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"Could not read model file {path}: {exc}") from exc
-
+            raise ValueError(f"Unable to read model {path}: {exc}") from exc
         if not isinstance(payload, dict) or payload.get("version") != cls.MODEL_VERSION:
-            raise ValueError("Unsupported or invalid Q-table model version.")
-        parameters = payload.get("parameters")
-        records = payload.get("q_values")
-        if not isinstance(parameters, dict) or not isinstance(records, list):
-            raise ValueError("Model must contain parameters and q_values.")
-
-        agent = cls(seed=seed, **{
-            name: parameters[name]
-            for name in (
-                "alpha",
-                "gamma",
-                "epsilon",
-                "epsilon_min",
-                "epsilon_decay",
-            )
-            if name in parameters
+            raise ValueError("Unsupported Q-table model.")
+        parameters = payload.get("parameters", {})
+        agent = cls(**{
+            key: parameters[key]
+            for key in ("alpha", "gamma", "epsilon", "epsilon_min", "epsilon_decay")
+            if key in parameters
         })
-        for record in records:
-            if not isinstance(record, dict):
-                raise ValueError("Each Q-table entry must be an object.")
-            state = cls._validate_state(record.get("state", []))
-            action = record.get("action")
-            value = record.get("value")
-            if not isinstance(action, int) or action not in range(9):
-                raise ValueError("Each Q-table action must be an integer from 0 to 8.")
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise ValueError("Each Q-table value must be finite.")
-            agent.q_table[(state, action)] = float(value)
+        entries = payload.get("q_table")
+        if not isinstance(entries, list):
+            raise ValueError("Model q_table must be a list.")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError("Invalid Q-table entry.")
+            state = cls._validate_state(entry.get("state", []))
+            values = entry.get("values")
+            if not isinstance(values, list) or len(values) != 9:
+                raise ValueError("Each Q-table entry needs nine values.")
+            if any(not isinstance(value, (int, float)) or not math.isfinite(value)
+                   for value in values):
+                raise ValueError("Q-table values must be finite numbers.")
+            agent.q_table[state] = [float(value) for value in values]
         return agent

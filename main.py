@@ -3,8 +3,8 @@ import random
 from pathlib import Path
 
 import pygame
-from agent import QLearningAgent
 from game import TicTacToe, X, O
+from agent import QLearningAgent
 
 pygame.init()
 
@@ -39,20 +39,26 @@ body = font(15)
 small = font(13)
 symbol_font = font(76, True)
 
+# -------------------- TRAINED AI --------------------
+
+MODEL_PATH = Path(__file__).with_name("q_table.pkl")
+
+if MODEL_PATH.exists():
+    try:
+        agent = QLearningAgent.load(MODEL_PATH)
+    except ValueError as exc:
+        raise RuntimeError(f"Unable to load {MODEL_PATH}: {exc}") from exc
+    ai_label = "Trained AI"
+else:
+    agent = None
+    ai_label = "Random AI (train first)"
+    print("q_table.pkl not found - run 'python train.py' first. "
+          "Falling back to a random opponent.")
+
 # -------------------- GAME STATE --------------------
 
 game = TicTacToe()
 mode = "ai"
-MODEL_PATH = Path(__file__).with_name("q_table.json")
-
-try:
-    trained_agent = QLearningAgent.load(MODEL_PATH)
-    ai_label = "Trained AI"
-except FileNotFoundError:
-    trained_agent = None
-    ai_label = "Random AI (train first)"
-except ValueError as exc:
-    raise RuntimeError(f"Unable to load {MODEL_PATH}: {exc}") from exc
 
 stats = {
     "you": 0,
@@ -125,14 +131,11 @@ def ai_move():
         actions = game.get_legal_actions()
 
         if actions:
-            if trained_agent is None:
+            if agent is None:
                 action = random.choice(actions)
             else:
-                state = trained_agent.encode_state(
-                    game.get_state(), game.current_player
-                )
-                action = trained_agent.select_action(
-                    state, actions, training=False
+                action = agent.choose_action(
+                    game.get_state(), actions, O, training=False
                 )
             game.make_move(action)
 
@@ -168,7 +171,7 @@ def draw():
     # Header
     text("Tic-Tac-Toe", 35, 25, TEXT, title_font)
     text(
-        "A simple game with reinforcement learning",
+        "Human vs a Q-Learning agent" if agent else "A simple game with reinforcement learning",
         37, 62, MUTED, small
     )
 
@@ -350,6 +353,7 @@ def draw():
 # -------------------- MAIN LOOP --------------------
 
 def main():
+    global mode
     running = True
 
     while running:

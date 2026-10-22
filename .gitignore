@@ -29,6 +29,7 @@ desktop.ini
 
 # Generated model and training files
 q_table.pkl
+q_table.json
 *.joblib
 *.model
 
